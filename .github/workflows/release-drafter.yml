@@ -4,8 +4,8 @@
 on:
   push:
     branches:
-      - master
-      - main
+#      - master
+#      - main
 
 jobs:
   update_release_draft:
