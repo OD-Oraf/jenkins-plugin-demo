@@ -26,4 +26,13 @@ Refer to our [contribution guidelines](https://github.com/jenkinsci/.github/blob
 
 Licensed under MIT, see [LICENSE](LICENSE.md)
 
-# jenkins-plugin-demo
+# jenkins-plugin-demo instructions
+## Build plugin
+```shell
+mvn clean package -Dmaven.compiler.failOnError=false
+```
+
+## Run Jenkins Server from build plugin
+```shell
+mvn hpi:run -Dport=8081
+```
