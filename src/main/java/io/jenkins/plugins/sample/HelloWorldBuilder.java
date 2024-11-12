@@ -67,29 +67,27 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 //
 //    }
     @Override
-    public void perform(Run<?, ?> run, FilePath workspace, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
-        listener.getLogger().println("workspace " + workspace);
+    public void perform(Run<?, ?> run, FilePath workspace, EnvVars env, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
+        listener.getLogger().println("workspace: " + workspace);
         launcher.launch().cmds("pwd").stdout(listener).join();
 
-        logMessage(listener, "Printing contents of workspace");
+        logMessage(listener, "Printing contents of workspace: ");
         launcher.launch()
                 .cmds("ls", "-la")
                 .pwd(workspace)
                 .stdout(listener)
                 .join();
-//        FilePath file = workspace.child("example.txt");
 
         AgentAccess agentAccess = new AgentAccess();
         agentAccess.listAgents();
 
-        String agentName = getAgentName(run, listener);
+        String agentName = getAgentName(run, env, listener);
 
         String workspacePath = workspace.getRemote();
         String completeFilePath = workspacePath + "/" + filePath;
-        System.out.println("complete file path: " + completeFilePath);
+        logMessage(listener, "complete file path: " + completeFilePath);
 
         printFileContents(listener, completeFilePath, agentName);
-
     }
 
     private void logMessage(TaskListener listener, String message) {
@@ -104,8 +102,6 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
         if (agent != null) {
             FilePath remoteFile = new FilePath(agent.getChannel(), filePath);
-
-
             if (remoteFile.exists()) {
                 try {
                     String fileContents = remoteFile.readToString();
@@ -123,25 +119,15 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         } else {
             System.out.println("Agent " + agentName + " not found");
             logMessage(listener, "Agent " + agentName + " not found");
-
         }
-
     }
 
-    private String getAgentName(Run<?, ?> run, TaskListener listener) {
+    private String getAgentName(Run<?, ?> run, EnvVars env, TaskListener listener) {
         try {
-
-//            EnvVars allEnvVars = run.getEnvironment(listener);
-//            logMessage(listener, allEnvVars.toString());
-
-            EnvVars envVars = run.getEnvironment(listener);
-
-            String agentName = envVars.get("NODE_NAME");
-            logMessage(listener, envVars.toString());
-//            logMessage(listener, "Running on " + agentName);
-
+            String agentName = env.get("NODE_NAME");
 
             if (agentName != null) {
+                logMessage(listener, "Found agent: " + agentName);
                 return agentName;
             } else {
                 logMessage(listener, "NODE_NAME variable not set");
