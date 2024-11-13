@@ -24,14 +24,12 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     private final String name;
     private boolean useFrench;
     private final String filePath;
-//    private final String agentName;
     private CustomLogger logger;
 
     @DataBoundConstructor
     public HelloWorldBuilder(String name, String filePath) {
         this.name = name;
         this.filePath = filePath;
-//        this.agentName = agentName;
     }
 
     public String getName() {
@@ -45,10 +43,6 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     public String getFilePath() {
         return filePath;
     }
-
-//    public String getAgentName() {
-//        return agentName;
-//    }
 
     @DataBoundSetter
     public void setUseFrench(boolean useFrench) {
