@@ -29,7 +29,7 @@ Licensed under MIT, see [LICENSE](LICENSE.md)
 # jenkins-plugin-demo instructions
 ## Build plugin
 ```shell
-mvn clean package -Dmaven.compiler.failOnError=false
+mvn clean package -Dmaven.compiler.failOnError=false -DskipTests
 ```
 
 ## Run Jenkins Server from build plugin
