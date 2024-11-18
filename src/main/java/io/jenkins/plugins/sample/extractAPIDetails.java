@@ -20,18 +20,18 @@ import java.util.Map;
 class extractAPIDetails {
     public static void main(String[] args) {
         ObjectMapper mapper = new ObjectMapper();
+        String accessToken = "d75fd979-df91-489d-9520-037e4ecc5e48";
 
-
-        File file = new File("./demo/src/main/java/io/jenkins/plugins/sample/categories.json");
+//        File file = new File("./demo/src/main/java/io/jenkins/plugins/sample/categories.json");
 
         try {
             OkHttpClient client = new OkHttpClient().newBuilder()
                     .build();
             MediaType mediaType = MediaType.parse("text/plain");
-//            RequestBody body = RequestBody.create(mediaType, "");
+            RequestBody body = RequestBody.create(mediaType, "");
             Request request = new Request.Builder()
                     .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/a541ecba-4afe-4ce2-a4bb-7c8849912c7f/deom/asset")
-                    .addHeader("Authorization", "bearer 24c7e417-60a2-4821-b69b-617efef0c00d")
+                    .addHeader("Authorization", "bearer " + accessToken)
                     .build();
             Response response = client.newCall(request).execute();
 

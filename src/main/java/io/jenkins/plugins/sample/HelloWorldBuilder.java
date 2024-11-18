@@ -40,15 +40,17 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     private final String name;
     private boolean useFrench;
     private final String filePath;
-    private CustomLogger logger;
+    private final String orgId;
+    private final String assetId;
     private String clintId;
     private String clientSecret;
-    private String accessToken = "29bf7e31-bc7d-4245-a19c-9b1af42b2a04";
 
     @DataBoundConstructor
-    public HelloWorldBuilder(String name, String filePath) {
+    public HelloWorldBuilder(String name, String filePath, String orgId, String assetId) {
         this.name = name;
         this.filePath = filePath;
+        this.orgId = orgId;
+        this.assetId = assetId;
     }
 
     public String getName() {
@@ -87,7 +89,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
         printFileContents(listener, absoluteFilePath);
 
-//        populateCategories(listener, absoluteFilePath, agentName, this.accessToken);
+        populateCategories(listener, absoluteFilePath);
     }
 
     private static void logMessage(TaskListener listener, String message) {
@@ -130,28 +132,22 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
     }
 
-    private static void populateCategories(
+    private void populateCategories(
             TaskListener listener,
-            String filePath,
-            String agentName,
-            String accessToken
+            String filePath
     ) throws JsonProcessingException {
+        // Get Access Token
+        String accessToken = getAccessToken(listener);
+        logMessage(listener, "Access Token: " + accessToken);
 
-        Jenkins jenkins = Jenkins.get();
-        Node agent = jenkins.getNode(agentName);
-
-        Computer computer = jenkins.getComputer(agentName);
-        FilePath remoteFile = new FilePath(agent.getChannel(), filePath);
-        String remoteFilePath = remoteFile.getRemote();
-
+        // Get Latest Asset Version
+        String latestVersion = getLatestVersion(listener, accessToken);
 
         ObjectMapper mapper = new ObjectMapper();
 
-//        System.out.println("Current working directory: " + System.getProperty("user.dir"));
-        File file = new File(remoteFilePath);
-
+        // Populate Categories
         try {
-            List<HashMap<String, Object>> categoriesList = mapper.readValue(new File(file.getPath()), new TypeReference<List<HashMap<String, Object>>>() {});
+            List<HashMap<String, Object>> categoriesList = mapper.readValue(new File(filePath), new TypeReference<List<HashMap<String, Object>>>() {});
             // Print the content
 //            System.out.println(categoriesList.toString());
             for (Map<String, Object> categoryMap : categoriesList) {
@@ -178,12 +174,9 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
                 // Create Request Body
                 RequestBody body = RequestBody.create(mediaType, jsonObject.toString());
 
-                // Get Latest Asset Version
-                String latestVersion = getLatestVersion(listener);
-
                 // Build Request
                 Request request = new Request.Builder()
-                        .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/a541ecba-4afe-4ce2-a4bb-7c8849912c7f/deom/" + latestVersion + "/tags/categories/" + urlEncodedTagKey)
+                        .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/"+ this.orgId + "/deom/" + latestVersion + "/tags/categories/" + urlEncodedTagKey)
                         .method("PUT", body)
                         .addHeader("Content-Type", "application/json")
                         .addHeader("Authorization", "bearer " + accessToken)
@@ -197,6 +190,11 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
                 // Log response details
                 logMessage(listener, "Response Status Code: " + response.code());
+                int statusCode = response.code();
+                // Check if the status code is in the 2XX range
+                if (statusCode < 200 || statusCode >= 300) {
+                    throw new RuntimeException("HTTP error: " + statusCode);
+                }
                 logMessage(listener, "Response Headers: " + response.headers());
                 logMessage(listener,"Response Body: " + response.body().string());
 
@@ -215,13 +213,13 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
 
 
-    private static String getFileDetailsFromServer(TaskListener listener, String accessToken) throws IOException {
+    private String getFileDetailsFromServer(TaskListener listener, String accessToken) throws IOException {
         OkHttpClient client = new OkHttpClient().newBuilder()
                 .build();
         MediaType mediaType = MediaType.parse("text/plain");
         RequestBody body = RequestBody.create(mediaType, "");
         Request request = new Request.Builder()
-                .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/a541ecba-4afe-4ce2-a4bb-7c8849912c7f/deom/asset")
+                .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/" + this.orgId + "/deom/asset")
                 .method("GET", body)
                 .addHeader("Authorization", "bearer " + accessToken)
                 .build();
@@ -247,24 +245,25 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         }
     }
 
-    private static String getLatestVersion(TaskListener listener) {
+    private String getLatestVersion(TaskListener listener, String accessToken) {
         ObjectMapper mapper = new ObjectMapper();
 
-        logMessage(listener, "Current working directory: " + System.getProperty("user.dir"));
-        File file = new File("./demo/src/main/java/io/jenkins/plugins/sample/categories.json");
+        if (accessToken.length() == 0) {
+            throw new RuntimeException("Access Token is empty");
+        }
 
         try {
+            String authHeader = "bearer " + accessToken;
+            logMessage(listener, authHeader);
             OkHttpClient client = new OkHttpClient().newBuilder()
                     .build();
             MediaType mediaType = MediaType.parse("text/plain");
 //            RequestBody body = RequestBody.create(mediaType, "");
             Request request = new Request.Builder()
-                    .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/a541ecba-4afe-4ce2-a4bb-7c8849912c7f/deom/asset")
-                    .addHeader("Authorization", "bearer 24c7e417-60a2-4821-b69b-617efef0c00d")
+                    .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/" + this.orgId + "/deom/asset")
+                    .addHeader("Authorization", authHeader)
                     .build();
             Response response = client.newCall(request).execute();
-
-
 
             // Log request details
             logMessage(listener,"Request URL: " + request.url());
@@ -274,10 +273,18 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             // Log response details
             logMessage(listener,"Response Status Code: " + response.code());
             logMessage(listener,"Response Headers: " + response.headers());
-//            System.out.println("Response Body: " + response.body().string());
-
             String responseBody = response.body().string();
             logMessage(listener,responseBody);
+
+            // Throw Error if response code is not 2XX
+            int statusCode = response.code();
+            // Check if the status code is in the 2XX range
+            if (statusCode < 200 || statusCode >= 300) {
+                logMessage(listener, "Error getting API Details from server");
+                response.close();
+                throw new RuntimeException("HTTP error: " + statusCode);
+            }
+
             String latestVersion = extractVersion(listener, responseBody);
 
             logMessage(listener,"Latest version: " + latestVersion);
@@ -304,8 +311,70 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     }
 
     private static String getAccessToken(TaskListener listener) {
+        ObjectMapper mapper = new ObjectMapper();
 
-        return "";
+        String clientId = "9d86c5d7bcb6405bab5f66db454fb7d2";
+        String clientSecret = "0620101761de45ff87837B4D7068bd56";
+
+        try {
+            OkHttpClient client = new OkHttpClient().newBuilder().build();
+            MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
+
+            // Create JSON payload object
+            ObjectNode payload = mapper.createObjectNode();
+
+            // Create Payload
+            payload.put("grant_type", "client_credentials");
+            payload.put("client_id", clientId);
+            payload.put("client_secret", clientSecret);
+
+            logMessage(listener, payload.toString());
+
+            // Create Request Body
+            RequestBody body = RequestBody.create(mediaType, payload.toString());
+
+            // Build Request
+            Request request = new Request.Builder()
+                    .url("https://anypoint.mulesoft.com/accounts/api/v2/oauth2/token")
+                    .method("POST", body)
+                    .addHeader("Content-Type", "application/json")
+                    .build();
+            Response response = client.newCall(request).execute();
+
+            // Log request details
+            logMessage(listener, "Request URL: " + request.url());
+            logMessage(listener, "Request Method: " + request.method());
+            logMessage(listener, "Request Headers: " + request.headers());
+
+            // Log response details
+            logMessage(listener, "Response Status Code: " + response.code());
+            int statusCode = response.code();
+            // Check if the status code is in the 2XX range
+            if (statusCode < 200 || statusCode >= 300) {
+                throw new RuntimeException("HTTP error: " + statusCode);
+            }
+            logMessage(listener, "Response Headers: " + response.headers());
+//            logMessage("Response Body: " + response.body().string());
+
+            String responseBody = response.body().string();
+//            logMessage(listener, responseBody);
+            String accessToken = "";
+
+            try {
+                ObjectMapper responseMapper = new ObjectMapper();
+                JsonNode jsonNode = responseMapper.readTree(responseBody);
+                accessToken = jsonNode.get("access_token").asText();
+            } catch (Exception e) {
+                throw new RuntimeException("Error extracting access token: " + e.getMessage());
+            }
+
+            // Close the response body
+            response.close();
+
+            return accessToken;
+        } catch (IOException e) {
+            throw new RuntimeException("Error Getting access token " + e.getMessage());
+        }
     }
 
     @Symbol("greet")
