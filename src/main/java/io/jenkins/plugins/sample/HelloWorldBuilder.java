@@ -552,7 +552,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         return url;
     }
 
-    @Symbol("greet")
+    @Symbol("upload")
     @Extension
     public static final class DescriptorImpl extends BuildStepDescriptor<Builder> {
 
