@@ -18,9 +18,6 @@ import hudson.util.FormValidation;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +27,7 @@ import jenkins.model.Jenkins;
 import jenkins.tasks.SimpleBuildStep;
 //import okhttp3.*;
 import okhttp3.*;
+import org.apache.tools.ant.taskdefs.Parallel;
 import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
@@ -39,16 +37,18 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
     private final String name;
     private boolean useFrench;
-    private final String filePath;
+    private final String apiSpecFilePath;
+    private final String categoriesFilePath;
     private final String orgId;
     private final String assetId;
     private String clientId;
     private String clientSecret;
 
     @DataBoundConstructor
-    public HelloWorldBuilder(String name, String filePath, String orgId, String assetId, String clientId, String clientSecret) {
+    public HelloWorldBuilder(String name, String apiSpecFilePath, String categoriesFilePath, String orgId, String assetId, String clientId, String clientSecret) {
         this.name = name;
-        this.filePath = filePath;
+        this.apiSpecFilePath = apiSpecFilePath;
+        this.categoriesFilePath = categoriesFilePath;
         this.orgId = orgId;
         this.assetId = assetId;
         this.clientId = clientId;
@@ -59,8 +59,12 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         return name;
     }
 
-    public String getFilePath() {
-        return filePath;
+    public String getApiSpecFilePath() {
+        return apiSpecFilePath;
+    }
+
+    public String categoriesFilePath() {
+        return categoriesFilePath;
     }
 
     public String getOrgId() {
@@ -86,6 +90,10 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
     @Override
     public void perform(Run<?, ?> run, FilePath workspace, EnvVars env, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
+        // Get Access Token
+        String accessToken = getAccessToken(listener);
+        logMessage(listener, "Access Token: " + accessToken);
+
         listener.getLogger().println("workspace: " + workspace);
         launcher.launch().cmds("pwd").stdout(listener).join();
 
@@ -102,24 +110,99 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         String agentName = getAgentName(run, env, listener);
 
         String workspacePath = workspace.getRemote();
-        String absoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + filePath);
-        logMessage(listener, "Absolute File Path: " + absoluteFilePath);
 
-        printFileContents(listener, absoluteFilePath);
+        String apiSpecAbsoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + apiSpecFilePath);
+        logMessage(listener, "API Spec Absolute File Path: " + apiSpecAbsoluteFilePath);
 
-        populateCategories(listener, absoluteFilePath);
+        String categoriesAbsoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + categoriesFilePath);
+        logMessage(listener, "API Spec Absolute File Path: " + categoriesAbsoluteFilePath);
+
+        fileExists(listener, apiSpecAbsoluteFilePath);
+        fileExists(listener, categoriesAbsoluteFilePath);
+
+        publishAPISpec(listener, apiSpecAbsoluteFilePath, accessToken);
+
+        // Get Latest Asset Version
+        String latestVersion = getLatestVersion(listener, accessToken);
+        logMessage(listener, "Latest Version: " + latestVersion);
+
+        populateCategories(listener, categoriesAbsoluteFilePath, accessToken, latestVersion);
+    }
+
+    private void publishAPISpec(
+            TaskListener listener,
+            String filePath,
+            String accessToken
+    ) {
+        logMessage(listener, "================================PUBLISH API SPEC=======================");
+        ObjectMapper mapper = new ObjectMapper();
+//        String accessToken = "26859bb8-6316-4510-9aa6-b5b57bd4aa89";
+
+        try {
+            String fileName = getFileNameFromPath(filePath);
+            logMessage(listener, "API Spec Filename: " + fileName);
+            String version = getVersionFromFileName(fileName);
+            logMessage(listener, "File Version: " + version);
+
+            OkHttpClient client = new OkHttpClient().newBuilder()
+                    .build();
+            MediaType mediaType = MediaType.parse("text/plain");
+            RequestBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart("name",this.assetId)
+                    .addFormDataPart("type","rest-api")
+                    .addFormDataPart("status","published")
+                    .addFormDataPart("properties.apiVersion","v1")
+                    .addFormDataPart("properties.mainFile","oas.yaml")
+                    .addFormDataPart("files.oas.yaml",fileName,
+                            RequestBody.create(MediaType.parse("application/octet-stream"),
+                                    new File(filePath)))
+                    .build();
+
+            Request request = new Request.Builder()
+                    .url("https://anypoint.mulesoft.com/exchange/api/v2/organizations/"+ this.orgId + "/assets/" + this.orgId + "/" + this.assetId + "/" + version)
+                    .method("POST", body)
+                    .addHeader("Authorization", "bearer " + accessToken)
+                    .build();
+
+            Response response = client.newCall(request).execute();
+
+            // Log request details
+            logMessage(listener, "Request URL: " + request.url());
+            logMessage(listener,"Request Method: " + request.method());
+            logMessage(listener,"Request Headers: " + request.headers());
+
+            // Log response details
+            logMessage(listener,"Response Status Code: " + response.code());
+            logMessage(listener,"Response Headers: " + response.headers());
+//            logMessage(listner,"Response Body: " + response.body().string());
+
+            String responseBody = response.body().string();
+            logMessage(listener,responseBody);
+
+            // Throw error for non 2XX status code
+            int statusCode = response.code();
+            if (statusCode < 200 || statusCode >= 300) {
+                throw new RuntimeException("HTTP error: " + statusCode);
+            }
+
+
+            String publishStatusURL = extractPublishStatusURL(listener, responseBody);
+            getPublishStatus(listener, publishStatusURL, accessToken);
+
+            // Close the response body
+            response.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private void populateCategories(
             TaskListener listener,
-            String filePath
+            String filePath,
+            String accessToken,
+            String latestVersion
     ) throws JsonProcessingException {
-        // Get Access Token
-        String accessToken = getAccessToken(listener);
-        logMessage(listener, "Access Token: " + accessToken);
-
-        // Get Latest Asset Version
-        String latestVersion = getLatestVersion(listener, accessToken);
+        logMessage(listener, "========================================PUBLISH CATEGORIES====================================");
 
         ObjectMapper mapper = new ObjectMapper();
 
@@ -154,7 +237,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
                 // Build Request
                 Request request = new Request.Builder()
-                        .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/"+ this.orgId + "/deom/" + latestVersion + "/tags/categories/" + urlEncodedTagKey)
+                        .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/"+ this.orgId + "/" + this.assetId +"/" + latestVersion + "/tags/categories/" + urlEncodedTagKey)
                         .method("PUT", body)
                         .addHeader("Content-Type", "application/json")
                         .addHeader("Authorization", "bearer " + accessToken)
@@ -184,6 +267,61 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         }
     }
 
+    private static String extractPublishStatusURL(TaskListener listener, String jsonResponse) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode jsonNode = objectMapper.readTree(jsonResponse);
+            return jsonNode.get("publicationStatusLink").asText();
+        } catch (Exception e) {
+            logMessage(listener, "Error in extracting version: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static void getPublishStatus(TaskListener listener, String url, String accessToken) {
+        try {
+            OkHttpClient client = new OkHttpClient().newBuilder()
+                    .build();
+            MediaType mediaType = MediaType.parse("text/plain");
+//            RequestBody body = RequestBody.create(mediaType, "");
+            Request request = new Request.Builder()
+                    .url(url)
+                    .addHeader("Authorization", "bearer " + accessToken)
+                    .build();
+            Response response = client.newCall(request).execute();
+            // Log request details
+            logMessage(listener,"Request URL: " + request.url());
+            logMessage(listener,"Request Method: " + request.method());
+            logMessage(listener,"Request Headers: " + request.headers());
+
+            // Log response details
+            logMessage(listener,"Response Status Code: " + response.code());
+            logMessage(listener,"Response Headers: " + response.headers());
+//            logMessage(listener,"Response Body: " + response.body().string());
+
+            String responseBody = response.body().string();
+            logMessage(listener,responseBody);
+
+            try {
+                ObjectMapper objectMapper = new ObjectMapper();
+                JsonNode jsonNode = objectMapper.readTree(responseBody);
+                String status = jsonNode.get("status").asText();
+
+                if (!status.equals("completed") && !status.equals("running")) {
+                    throw new RuntimeException("Asset did not publish");
+                }
+            } catch (Exception e) {
+                logMessage(listener,"Error reading status: " + e.getMessage());
+                throw new RuntimeException("Error reading status " + e.getMessage());
+            }
+//            String latestVersion = extractVersion(responseBody);
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+
     private String getFileDetailsFromServer(TaskListener listener, String accessToken) throws IOException {
         OkHttpClient client = new OkHttpClient().newBuilder()
                 .build();
@@ -199,6 +337,8 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     }
 
     private String getLatestVersion(TaskListener listener, String accessToken) {
+        logMessage(listener, "============================GET LATEST VERSION===============================");
+
         ObjectMapper mapper = new ObjectMapper();
 
         if (accessToken.length() == 0) {
@@ -207,7 +347,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
         try {
             String authHeader = "bearer " + accessToken;
-            logMessage(listener, authHeader);
+//            logMessage(listener, authHeader);
             OkHttpClient client = new OkHttpClient().newBuilder()
                     .build();
             MediaType mediaType = MediaType.parse("text/plain");
@@ -255,7 +395,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     private String getAccessToken(TaskListener listener) {
         ObjectMapper mapper = new ObjectMapper();
 
-        String clientId = this.clientSecret;
+        String clientId = this.clientId;
         String clientSecret = this.clientSecret;
 
         try {
@@ -290,15 +430,19 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
             // Log response details
             logMessage(listener, "Response Status Code: " + response.code());
+            String responseBody = response.body().string();
+            logMessage(listener, "Response Body: " + responseBody);
+
             int statusCode = response.code();
             // Check if the status code is in the 2XX range
             if (statusCode < 200 || statusCode >= 300) {
+                // Close the response body
+                response.close();
                 throw new RuntimeException("HTTP error: " + statusCode);
             }
             logMessage(listener, "Response Headers: " + response.headers());
 //            logMessage("Response Body: " + response.body().string());
 
-            String responseBody = response.body().string();
 //            logMessage(listener, responseBody);
             String accessToken = "";
 
@@ -371,20 +515,36 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         }
     }
 
-    private void printFileContents(TaskListener listener, String filePath) throws IOException, InterruptedException {
+    private void fileExists(TaskListener listener, String filePath) throws IOException, InterruptedException {
         FilePath file = new FilePath(new File(filePath));
         if (file.exists()) {
-            try {
+            logMessage(listener, "Found " + file);
 
-                logMessage(listener, "Printing file contents of " + file);
-                logMessage(listener, file.readToString());
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
         } else {
-            logMessage(listener, "File " + filePath + " does not exist");
+            logMessage(listener, "File " + file + " not found");
+            throw new RuntimeException("File " + file + " not found");
         }
 
+    }
+
+    private static String getFileNameFromPath(String filePath) {
+        String[] split = filePath.split("/");
+        return split[split.length - 1];
+    }
+
+    private static String getVersionFromFileName(String fileName) {
+//        String fileName = "openapi---1.0.3.yaml";
+
+        String[] filenamePartition = fileName.split("---");
+
+        if (filenamePartition.length > 1) {
+            String versionWithExtension = filenamePartition[1];
+            String version = versionWithExtension.replace(".yaml", "");
+//            logMessage(listener,"Extracted version: " + version);
+            return version;
+        } else {
+            throw new RuntimeException("Unable to get version");
+        }
     }
 
     private static String urlEncode(String url) {
