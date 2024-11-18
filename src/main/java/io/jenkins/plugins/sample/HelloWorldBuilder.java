@@ -410,7 +410,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             payload.put("client_id", clientId);
             payload.put("client_secret", clientSecret);
 
-            logMessage(listener, payload.toString());
+//            logMessage(listener, payload.toString());
 
             // Create Request Body
             RequestBody body = RequestBody.create(mediaType, payload.toString());
