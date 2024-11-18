@@ -35,7 +35,7 @@ import org.kohsuke.stapler.QueryParameter;
 
 public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
-    private final String name;
+//    private final String name;
     private boolean useFrench;
     private final String apiSpecFilePath;
     private final String categoriesFilePath;
@@ -45,8 +45,8 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     private String clientSecret;
 
     @DataBoundConstructor
-    public HelloWorldBuilder(String name, String apiSpecFilePath, String categoriesFilePath, String orgId, String assetId, String clientId, String clientSecret) {
-        this.name = name;
+    public HelloWorldBuilder(String apiSpecFilePath, String categoriesFilePath, String orgId, String assetId, String clientId, String clientSecret) {
+//        this.name = name;
         this.apiSpecFilePath = apiSpecFilePath;
         this.categoriesFilePath = categoriesFilePath;
         this.orgId = orgId;
@@ -55,9 +55,9 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         this.clientSecret = clientSecret;
     }
 
-    public String getName() {
-        return name;
-    }
+//    public String getName() {
+//        return name;
+//    }
 
     public String getApiSpecFilePath() {
         return apiSpecFilePath;
