@@ -1,6 +1,7 @@
 target
 
 # mvn hpi:run
+work-bckp
 work
 
 # IntelliJ IDEA project files
