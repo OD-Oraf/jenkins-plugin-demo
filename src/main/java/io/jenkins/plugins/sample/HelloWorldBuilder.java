@@ -42,15 +42,17 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     private final String filePath;
     private final String orgId;
     private final String assetId;
-    private String clintId;
+    private String clientId;
     private String clientSecret;
 
     @DataBoundConstructor
-    public HelloWorldBuilder(String name, String filePath, String orgId, String assetId) {
+    public HelloWorldBuilder(String name, String filePath, String orgId, String assetId, String clientId, String clientSecret) {
         this.name = name;
         this.filePath = filePath;
         this.orgId = orgId;
         this.assetId = assetId;
+        this.clientId = clientId;
+        this.clientSecret = clientSecret;
     }
 
     public String getName() {
@@ -59,6 +61,22 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
     public String getFilePath() {
         return filePath;
+    }
+
+    public String getOrgId() {
+        return orgId;
+    }
+
+    public String getAssetId() {
+        return assetId;
+    }
+
+    public String getClientId() {
+        return clientId;
+    }
+
+    public String getClientSecretId() {
+        return clientSecret;
     }
 
     @DataBoundSetter
@@ -90,46 +108,6 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         printFileContents(listener, absoluteFilePath);
 
         populateCategories(listener, absoluteFilePath);
-    }
-
-    private static void logMessage(TaskListener listener, String message) {
-        listener.getLogger().println(message);
-    }
-
-    private static String getRemoteFilePath(TaskListener listener,String agentName, String filePath) {
-        Jenkins jenkins = Jenkins.get();
-        Node agent = jenkins.getNode(agentName);
-
-        // Search File path on agent
-        FilePath remoteFile;
-
-        if (agent != null) {
-            remoteFile = new FilePath(agent.getChannel(), filePath);
-            logMessage(listener, "remoteFile: " + remoteFile);
-        } else {
-            remoteFile = null;
-            logMessage(listener, "Agent Node found in getRemoteFilePath()");
-        }
-
-
-        return remoteFile.getRemote();
-    }
-
-
-    private void printFileContents(TaskListener listener, String filePath) throws IOException, InterruptedException {
-        FilePath file = new FilePath(new File(filePath));
-        if (file.exists()) {
-            try {
-
-                logMessage(listener, "Printing file contents of " + file);
-                logMessage(listener, file.readToString());
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        } else {
-            logMessage(listener, "File " + filePath + " does not exist");
-        }
-
     }
 
     private void populateCategories(
@@ -206,13 +184,6 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         }
     }
 
-    private static String urlEncode(String url) {
-        url = url.replace(" ", "%20").trim();
-        return url;
-    }
-
-
-
     private String getFileDetailsFromServer(TaskListener listener, String accessToken) throws IOException {
         OkHttpClient client = new OkHttpClient().newBuilder()
                 .build();
@@ -225,24 +196,6 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
                 .build();
         Response response = client.newCall(request).execute();
         return "";
-    }
-
-    private String getAgentName(Run<?, ?> run, EnvVars env, TaskListener listener) {
-        try {
-            String agentName = env.get("NODE_NAME");
-
-            if (agentName != null) {
-                logMessage(listener, "Found agent: " + agentName);
-                return agentName;
-            } else {
-                logMessage(listener, "NODE_NAME variable not set");
-                return "Unknown";
-            }
-
-        } catch (Exception e) {
-            logMessage(listener, "Error retrieving NODE_NAME: " + e.getMessage());
-            return "Error";
-        }
     }
 
     private String getLatestVersion(TaskListener listener, String accessToken) {
@@ -299,22 +252,11 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
     }
 
-    private static String extractVersion(TaskListener listener, String jsonResponse) {
-        try {
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode jsonNode = objectMapper.readTree(jsonResponse);
-            return jsonNode.get("version").toString();
-        } catch (Exception e) {
-            logMessage(listener,"Error in extracting version: " + e.getMessage());
-            return null;
-        }
-    }
-
-    private static String getAccessToken(TaskListener listener) {
+    private String getAccessToken(TaskListener listener) {
         ObjectMapper mapper = new ObjectMapper();
 
-        String clientId = "9d86c5d7bcb6405bab5f66db454fb7d2";
-        String clientSecret = "0620101761de45ff87837B4D7068bd56";
+        String clientId = this.clientSecret;
+        String clientSecret = this.clientSecret;
 
         try {
             OkHttpClient client = new OkHttpClient().newBuilder().build();
@@ -375,6 +317,79 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
         } catch (IOException e) {
             throw new RuntimeException("Error Getting access token " + e.getMessage());
         }
+    }
+
+    private static String extractVersion(TaskListener listener, String jsonResponse) {
+        try {
+            ObjectMapper objectMapper = new ObjectMapper();
+            JsonNode jsonNode = objectMapper.readTree(jsonResponse);
+            return jsonNode.get("version").asText();
+        } catch (Exception e) {
+            logMessage(listener,"Error in extracting version: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private static void logMessage(TaskListener listener, String message) {
+        listener.getLogger().println(message);
+    }
+
+    private static String getRemoteFilePath(TaskListener listener,String agentName, String filePath) {
+        Jenkins jenkins = Jenkins.get();
+        Node agent = jenkins.getNode(agentName);
+
+        // Search File path on agent
+        FilePath remoteFile;
+
+        if (agent != null) {
+            remoteFile = new FilePath(agent.getChannel(), filePath);
+            logMessage(listener, "remoteFile: " + remoteFile);
+        } else {
+            remoteFile = null;
+            logMessage(listener, "Agent Node found in getRemoteFilePath()");
+        }
+
+
+        return remoteFile.getRemote();
+    }
+
+    private String getAgentName(Run<?, ?> run, EnvVars env, TaskListener listener) {
+        try {
+            String agentName = env.get("NODE_NAME");
+
+            if (agentName != null) {
+                logMessage(listener, "Found agent: " + agentName);
+                return agentName;
+            } else {
+                logMessage(listener, "NODE_NAME variable not set");
+                return "Unknown";
+            }
+
+        } catch (Exception e) {
+            logMessage(listener, "Error retrieving NODE_NAME: " + e.getMessage());
+            return "Error";
+        }
+    }
+
+    private void printFileContents(TaskListener listener, String filePath) throws IOException, InterruptedException {
+        FilePath file = new FilePath(new File(filePath));
+        if (file.exists()) {
+            try {
+
+                logMessage(listener, "Printing file contents of " + file);
+                logMessage(listener, file.readToString());
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        } else {
+            logMessage(listener, "File " + filePath + " does not exist");
+        }
+
+    }
+
+    private static String urlEncode(String url) {
+        url = url.replace(" ", "%20").trim();
+        return url;
     }
 
     @Symbol("greet")
