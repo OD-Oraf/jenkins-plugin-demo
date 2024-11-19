@@ -36,6 +36,8 @@ import hudson.FilePath;
 import okio.BufferedSink;
 import java.io.IOException;
 import java.io.InputStream;
+import jenkins.util.Timer;
+import java.util.concurrent.TimeUnit;
 
 public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
@@ -140,7 +142,8 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
         publishAPISpec(listener, apiSpecFile, accessToken);
 
-        // Get Latest Asset Version
+
+        // Get latest asset version to publish categories
         String latestVersion = getLatestVersion(listener, accessToken);
         logMessage(listener, "Latest Version: " + latestVersion);
 
@@ -152,7 +155,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             FilePath filePath,
             String accessToken
     ) {
-        logMessage(listener, "================================PUBLISH API SPEC=======================");
+        logMessage(listener, "=================================PUBLISH API SPEC==================================");
         ObjectMapper mapper = new ObjectMapper();
 
         try {
@@ -205,6 +208,8 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
                 throw new RuntimeException("HTTP error: " + statusCode);
             }
 
+            // Sleep for 2 seconds
+            sleep(2);
 
             String publishStatusURL = extractPublishStatusURL(listener, responseBody);
             getPublishStatus(listener, publishStatusURL, accessToken);
@@ -222,7 +227,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             String accessToken,
             String latestVersion
     ) throws JsonProcessingException {
-        logMessage(listener, "========================================PUBLISH CATEGORIES====================================");
+        logMessage(listener, "===========================================PUBLISH CATEGORIES========================================");
 
         ObjectMapper mapper = new ObjectMapper();
 
@@ -547,6 +552,15 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             throw new RuntimeException("File " + file + " not found");
         }
 
+    }
+
+    private static void sleep(int time) {
+        Timer.get().schedule(new Runnable() {
+            @Override
+            public void run() {
+                // Code to execute after the delay
+            }
+        }, time, TimeUnit.SECONDS);
     }
 
     private static String getFileNameFromPath(String filePath) {
