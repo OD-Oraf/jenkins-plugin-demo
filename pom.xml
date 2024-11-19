@@ -10,7 +10,7 @@
   </parent>
 
   <groupId>io.jenkins.plugins</groupId>
-  <artifactId>demo</artifactId>
+  <artifactId>Exchange-Upload-Plugin</artifactId>
   <version>${revision}${changelist}</version>
   <packaging>hpi</packaging>
 
@@ -31,7 +31,7 @@
 
   <properties>
     <revision>1.0</revision>
-    <changelist>-SNAPSHOT</changelist>
+    <changelist>-0</changelist>
 
     <!-- https://www.jenkins.io/doc/developer/plugin-development/choosing-jenkins-baseline/ -->
     <jenkins.version>2.414.3</jenkins.version>
