@@ -375,7 +375,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             MediaType mediaType = MediaType.parse("text/plain");
 //            RequestBody body = RequestBody.create(mediaType, "");
             Request request = new Request.Builder()
-                    .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/" + this.orgId + "/deom/asset")
+                    .url("https://anypoint.mulesoft.com/exchange/api/v2/assets/" + this.orgId + "/" + assetId + "/asset")
                     .addHeader("Authorization", authHeader)
                     .build();
             Response response = client.newCall(request).execute();
