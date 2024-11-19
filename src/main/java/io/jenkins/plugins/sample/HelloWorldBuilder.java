@@ -32,6 +32,10 @@ import org.jenkinsci.Symbol;
 import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.DataBoundSetter;
 import org.kohsuke.stapler.QueryParameter;
+import hudson.FilePath;
+import okio.BufferedSink;
+import java.io.IOException;
+import java.io.InputStream;
 
 public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
@@ -109,29 +113,46 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
         String agentName = getAgentName(run, env, listener);
 
-        String workspacePath = workspace.getRemote();
+//        String workspacePath = workspace.getRemote();
+        FilePath workspacePath = run.getExecutor().getCurrentWorkspace();
+        FilePath apiSpecFile;
+        FilePath categoriesFile;
+        if (workspace != null) {
+            apiSpecFile = workspace.child(apiSpecFilePath);
+            if (apiSpecFile.exists()) {
+                logMessage(listener, "Found " + apiSpecFile.getRemote());
+            }
 
-        String apiSpecAbsoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + apiSpecFilePath);
-        logMessage(listener, "API Spec Absolute File Path: " + apiSpecAbsoluteFilePath);
+            categoriesFile = workspace.child(categoriesFilePath);
+            if (categoriesFile.exists()) {
+                logMessage(listener, "Found " + categoriesFile.getRemote());
+            }
+        } else {
+            listener.getLogger().println("Workspace is not available.");
+            throw new RuntimeException("Workspace is not available");
+        }
 
-        String categoriesAbsoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + categoriesFilePath);
-        logMessage(listener, "API Spec Absolute File Path: " + categoriesAbsoluteFilePath);
+//        String apiSpecAbsoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + apiSpecFilePath);
+//        logMessage(listener, "API Spec Absolute File Path: " + apiSpecAbsoluteFilePath);
 
-        fileExists(listener, apiSpecAbsoluteFilePath);
-        fileExists(listener, categoriesAbsoluteFilePath);
+//        String categoriesAbsoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + categoriesFilePath);
+//        logMessage(listener, "API Spec Absolute File Path: " + categoriesAbsoluteFilePath);
 
-        publishAPISpec(listener, apiSpecAbsoluteFilePath, accessToken);
+//        fileExists(listener, apiSpecAbsoluteFilePath);
+//        fileExists(listener, categoriesAbsoluteFilePath);
 
-        // Get Latest Asset Version
-        String latestVersion = getLatestVersion(listener, accessToken);
-        logMessage(listener, "Latest Version: " + latestVersion);
-
-        populateCategories(listener, categoriesAbsoluteFilePath, accessToken, latestVersion);
+        publishAPISpec(listener, apiSpecFile, accessToken);
+//
+//        // Get Latest Asset Version
+//        String latestVersion = getLatestVersion(listener, accessToken);
+//        logMessage(listener, "Latest Version: " + latestVersion);
+//
+//        populateCategories(listener, categoriesAbsoluteFilePath, accessToken, latestVersion);
     }
 
     private void publishAPISpec(
             TaskListener listener,
-            String filePath,
+            FilePath filePath,
             String accessToken
     ) {
         logMessage(listener, "================================PUBLISH API SPEC=======================");
@@ -139,23 +160,26 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 //        String accessToken = "26859bb8-6316-4510-9aa6-b5b57bd4aa89";
 
         try {
-            String fileName = getFileNameFromPath(filePath);
+            String fileName = getFileNameFromPath(filePath.getRemote());
             logMessage(listener, "API Spec Filename: " + fileName);
             String version = getVersionFromFileName(fileName);
             logMessage(listener, "File Version: " + version);
 
             OkHttpClient client = new OkHttpClient().newBuilder()
                     .build();
-            MediaType mediaType = MediaType.parse("text/plain");
+
+            // Create a MediaType for "application/octet-stream"
+            MediaType mediaType = MediaType.parse("application/octet-stream");
+            // Create the custom RequestBody using FilePath
+            RequestBody fileRequestBody = new FilePathRequestBody(mediaType, filePath);
+
             RequestBody body = new MultipartBody.Builder().setType(MultipartBody.FORM)
                     .addFormDataPart("name",this.assetId)
                     .addFormDataPart("type","rest-api")
                     .addFormDataPart("status","published")
                     .addFormDataPart("properties.apiVersion","v1")
                     .addFormDataPart("properties.mainFile","oas.yaml")
-                    .addFormDataPart("files.oas.yaml",fileName,
-                            RequestBody.create(MediaType.parse("application/octet-stream"),
-                                    new File(filePath)))
+                    .addFormDataPart("files.oas.yaml", "oas.yaml", fileRequestBody)
                     .build();
 
             Request request = new Request.Builder()
