@@ -113,7 +113,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
         String agentName = getAgentName(run, env, listener);
 
-//        String workspacePath = workspace.getRemote();
+
         FilePath workspacePath = run.getExecutor().getCurrentWorkspace();
         FilePath apiSpecFile;
         FilePath categoriesFile;
@@ -121,33 +121,30 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             apiSpecFile = workspace.child(apiSpecFilePath);
             if (apiSpecFile.exists()) {
                 logMessage(listener, "Found " + apiSpecFile.getRemote());
+            } else {
+                logMessage(listener, "File " + apiSpecFile + " not found");
+                throw new RuntimeException("File " + apiSpecFile + " not found");
             }
 
             categoriesFile = workspace.child(categoriesFilePath);
             if (categoriesFile.exists()) {
                 logMessage(listener, "Found " + categoriesFile.getRemote());
+            } else {
+                logMessage(listener, "File " + categoriesFile + " not found");
+                throw new RuntimeException("File " + categoriesFile + " not found");
             }
         } else {
             listener.getLogger().println("Workspace is not available.");
             throw new RuntimeException("Workspace is not available");
         }
 
-//        String apiSpecAbsoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + apiSpecFilePath);
-//        logMessage(listener, "API Spec Absolute File Path: " + apiSpecAbsoluteFilePath);
-
-//        String categoriesAbsoluteFilePath = getRemoteFilePath(listener, agentName, workspacePath + "/" + categoriesFilePath);
-//        logMessage(listener, "API Spec Absolute File Path: " + categoriesAbsoluteFilePath);
-
-//        fileExists(listener, apiSpecAbsoluteFilePath);
-//        fileExists(listener, categoriesAbsoluteFilePath);
-
         publishAPISpec(listener, apiSpecFile, accessToken);
-//
-//        // Get Latest Asset Version
-//        String latestVersion = getLatestVersion(listener, accessToken);
-//        logMessage(listener, "Latest Version: " + latestVersion);
-//
-//        populateCategories(listener, categoriesAbsoluteFilePath, accessToken, latestVersion);
+
+        // Get Latest Asset Version
+        String latestVersion = getLatestVersion(listener, accessToken);
+        logMessage(listener, "Latest Version: " + latestVersion);
+
+        populateCategories(listener, categoriesFile, accessToken, latestVersion);
     }
 
     private void publishAPISpec(
@@ -157,7 +154,6 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     ) {
         logMessage(listener, "================================PUBLISH API SPEC=======================");
         ObjectMapper mapper = new ObjectMapper();
-//        String accessToken = "26859bb8-6316-4510-9aa6-b5b57bd4aa89";
 
         try {
             String fileName = getFileNameFromPath(filePath.getRemote());
@@ -198,7 +194,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             // Log response details
             logMessage(listener,"Response Status Code: " + response.code());
             logMessage(listener,"Response Headers: " + response.headers());
-//            logMessage(listner,"Response Body: " + response.body().string());
+            // logMessage(listner,"Response Body: " + response.body().string());
 
             String responseBody = response.body().string();
             logMessage(listener,responseBody);
@@ -222,7 +218,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
     private void populateCategories(
             TaskListener listener,
-            String filePath,
+            FilePath filePath,
             String accessToken,
             String latestVersion
     ) throws JsonProcessingException {
@@ -232,9 +228,9 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
         // Populate Categories
         try {
-            List<HashMap<String, Object>> categoriesList = mapper.readValue(new File(filePath), new TypeReference<List<HashMap<String, Object>>>() {});
+            List<HashMap<String, Object>> categoriesList = mapper.readValue(filePath.readToString(), new TypeReference<List<HashMap<String, Object>>>() {});
             // Print the content
-//            System.out.println(categoriesList.toString());
+            // System.out.println(categoriesList.toString());
             for (Map<String, Object> categoryMap : categoriesList) {
                 String tagKey = categoryMap.get("tagKey").toString();
                 String urlEncodedTagKey = urlEncode(tagKey);
@@ -288,6 +284,8 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             }
         } catch (IOException e) {
             e.printStackTrace();
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
         }
     }
 
