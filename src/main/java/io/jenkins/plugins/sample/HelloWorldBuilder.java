@@ -98,7 +98,8 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     public void perform(Run<?, ?> run, FilePath workspace, EnvVars env, Launcher launcher, TaskListener listener) throws IOException, InterruptedException {
         // Get Access Token
         String accessToken = getAccessToken(listener);
-        logMessage(listener, "Access Token: " + accessToken);
+        // don't expose access token in logs
+//        logMessage(listener, "Access Token: " + accessToken);
 
         listener.getLogger().println("workspace: " + workspace);
         launcher.launch().cmds("pwd").stdout(listener).join();
@@ -209,7 +210,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             }
 
             // Sleep for 2 seconds
-            sleep(2);
+            sleep(listener, 10);
 
             String publishStatusURL = extractPublishStatusURL(listener, responseBody);
             getPublishStatus(listener, publishStatusURL, accessToken);
@@ -364,7 +365,7 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
     }
 
     private String getLatestVersion(TaskListener listener, String accessToken) {
-        logMessage(listener, "============================GET LATEST VERSION===============================");
+        logMessage(listener, "============================GET LATEST VERSION====================================");
 
         ObjectMapper mapper = new ObjectMapper();
 
@@ -458,11 +459,13 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
             // Log response details
             logMessage(listener, "Response Status Code: " + response.code());
             String responseBody = response.body().string();
-            logMessage(listener, "Response Body: " + responseBody);
 
             int statusCode = response.code();
             // Check if the status code is in the 2XX range
             if (statusCode < 200 || statusCode >= 300) {
+                // Only output error response so the access token is not exposed in logs
+                logMessage(listener, "Response Body: " + responseBody);
+                logMessage(listener, "Check Client ID and Secret values");
                 // Close the response body
                 response.close();
                 throw new RuntimeException("HTTP error: " + statusCode);
@@ -554,13 +557,14 @@ public class HelloWorldBuilder extends Builder implements SimpleBuildStep {
 
     }
 
-    private static void sleep(int time) {
-        Timer.get().schedule(new Runnable() {
-            @Override
-            public void run() {
-                // Code to execute after the delay
-            }
-        }, time, TimeUnit.SECONDS);
+    private static void sleep(TaskListener listener, int seconds) {
+        logMessage(listener, "Waiting for asset to finish publishing");
+        try {
+            Thread.sleep(seconds * 1000);
+        } catch (InterruptedException e) {
+            // Handle the interruption appropriately
+            Thread.currentThread().interrupt(); // Restore the interrupted status
+        }
     }
 
     private static String getFileNameFromPath(String filePath) {
